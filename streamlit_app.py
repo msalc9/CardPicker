@@ -3,19 +3,28 @@ import random
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Card Drawing Simulator", page_icon="🃏", layout="centered")
+st.set_page_config(page_title="Red Head Card Game", page_icon="🂱", layout="centered")
 
-st.title("🃏 Card Drawing Simulator")
+st.title("🂱 Red Head Card Game")
 
 # Mappings for ranks and suits
 SUITS = ["S", "H", "D", "C"]  # Spades, Hearts, Diamonds, Clubs
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 SUIT_NAMES = {"S": "Spades", "H": "Hearts", "D": "Diamonds", "C": "Clubs"}
 
+# Red Head winning criteria: Red suits (Hearts/Diamonds) + Picture heads (Jack, Queen, King)
+RED_HEAD_SUITS = ["H", "D"]
+HEAD_RANKS = ["J", "Q", "K"]
+
 
 def create_deck():
     """Generates a fresh standard 52-card deck."""
     return [{"rank": r, "suit": s, "image": f"{r}{s}.png"} for s in SUITS for r in RANKS]
+
+
+def is_red_head(card):
+    """Checks if a card satisfies the Red Head win condition (Red Suit + J/Q/K)."""
+    return card["suit"] in RED_HEAD_SUITS and card["rank"] in HEAD_RANKS
 
 
 # Initialize session state
@@ -26,14 +35,24 @@ if "deck" not in st.session_state:
 if "drawn_cards" not in st.session_state:
     st.session_state.drawn_cards = []
 
+if "total_wins" not in st.session_state:
+    st.session_state.total_wins = 0
+
+if "total_draws" not in st.session_state:
+    st.session_state.total_draws = 0
+
+# --- GAME INFO BOX ---
+st.info(
+    "**Objective:** Draw a **Red Head** (Red Jack, Queen, or King of Hearts ♥ or Diamonds ♦) to win!"
+)
+
 # --- CONTROLS SECTION ---
 st.subheader("Controls")
 
-# Toggle for drawing with or without replacement
 replace_immediately = st.toggle(
     "Replace card back into deck immediately",
     value=False,
-    help="When enabled, cards are placed back into the deck right after being drawn, allowing duplicate draws."
+    help="When enabled, cards are placed back into the deck right after being drawn.",
 )
 
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -43,15 +62,22 @@ def draw_cards(count=1):
     cards = []
     for _ in range(count):
         if replace_immediately:
-            # Draw randomly without removing from deck
-            cards.append(random.choice(st.session_state.deck))
-        else:
-            # Pop card from remaining deck
             if st.session_state.deck:
-                cards.append(st.session_state.deck.pop())
+                card = random.choice(st.session_state.deck)
+                cards.append(card)
+        else:
+            if st.session_state.deck:
+                card = st.session_state.deck.pop()
+                cards.append(card)
             else:
                 st.warning("The deck is empty! Click Reshuffle to continue.")
                 break
+
+    for card in cards:
+        st.session_state.total_draws += 1
+        if is_red_head(card):
+            st.session_state.total_wins += 1
+
     st.session_state.drawn_cards.extend(cards)
 
 
@@ -68,46 +94,72 @@ with col3:
         st.session_state.deck = create_deck()
         random.shuffle(st.session_state.deck)
         st.session_state.drawn_cards = []
+        st.session_state.total_wins = 0
+        st.session_state.total_draws = 0
         st.rerun()
 
-# Deck Status Metric
-if replace_immediately:
-    st.caption("Mode: **With Replacement** | Deck count: **52 (Infinite Draws)**")
+# --- SCOREBOARD METRICS ---
+m1, m2, m3 = st.columns(3)
+m1.metric("Total Draws", st.session_state.total_draws)
+m2.metric("Red Head Wins 🏆", st.session_state.total_wins)
+
+if st.session_state.total_draws > 0:
+    win_rate = (st.session_state.total_wins / st.session_state.total_draws) * 100
+    m3.metric("Win Rate", f"{win_rate:.1f}%")
 else:
-    st.caption(f"Mode: **Without Replacement** | Cards remaining in deck: **{len(st.session_state.deck)}**")
+    m3.metric("Win Rate", "0.0%")
+
+# Deck Status Caption
+if replace_immediately:
+    st.caption("Mode: **With Replacement** | Remaining in deck: **52 (Infinite)**")
+else:
+    st.caption(
+        f"Mode: **Without Replacement** | Remaining in deck: **{len(st.session_state.deck)}**"
+    )
 
 st.divider()
 
-# --- DISPLAY SECTION ---
+# --- DISPLAY LAST DRAW & WIN ANNOUNCEMENT ---
 if st.session_state.drawn_cards:
-    st.subheader("Most Recent Draw")
-
     last_draw = st.session_state.drawn_cards[-1]
-    
-    # Option A: Local GitHub repo assets
-    image_path = os.path.join("assets", "cards", last_draw["image"])
-    
-    # Option B: Fallback CDN URL if local image is missing
-    rank_cdn = "0" if last_draw["rank"] == "10" else last_draw["rank"]
-    cdn_url = f"https://deckofcardsapi.com/static/img/{rank_cdn}{last_draw['suit']}.png"
+    won = is_red_head(last_draw)
 
-    # Display image (tries local file first, falls back to public CDN)
-    if os.path.exists(image_path):
-        st.image(image_path, width=160, caption=f"{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}")
+    if won:
+        st.balloons()
+        st.success(
+            f"🎉 **YOU WIN!** You drew the **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}**!"
+        )
     else:
-        st.image(cdn_url, width=160, caption=f"{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}")
+        st.write(
+            f"Drawn: **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}** (Not a Red Head)"
+        )
 
-    # Gallery of All Drawn Cards
+    # Card Image Rendering
+    image_path = os.path.join("assets", "cards", last_draw["image"])
+    rank_c = "0" if last_draw["rank"] == "10" else last_draw["rank"]
+    cdn_url = f"https://deckofcardsapi.com/static/img/{rank_c}{last_draw['suit']}.png"
+
+    if os.path.exists(image_path):
+        st.image(image_path, width=160)
+    else:
+        st.image(cdn_url, width=160)
+
+    # Display History Gallery
     if len(st.session_state.drawn_cards) > 1:
         st.subheader("Draw History")
         cols = st.columns(6)
         for i, card in enumerate(reversed(st.session_state.drawn_cards)):
             card_path = os.path.join("assets", "cards", card["image"])
-            rank_c = "0" if card["rank"] == "10" else card["rank"]
-            card_cdn = f"https://deckofcardsapi.com/static/img/{rank_c}{card['suit']}.png"
-            
+            rank_code = "0" if card["rank"] == "10" else card["rank"]
+            card_cdn = (
+                f"https://deckofcardsapi.com/static/img/{rank_code}{card['suit']}.png"
+            )
+
             with cols[i % 6]:
                 if os.path.exists(card_path):
                     st.image(card_path, use_container_width=True)
                 else:
                     st.image(card_cdn, use_container_width=True)
+
+                if is_red_head(card):
+                    st.caption("🏆 WIN")
