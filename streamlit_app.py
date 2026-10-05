@@ -41,7 +41,7 @@ if "total_wins" not in st.session_state:
 if "total_draws" not in st.session_state:
     st.session_state.total_draws = 0
 
-# --- SIDEBAR GAME MODE SELECTION ---
+# --- SIDEBAR GAME MODE & DISPLAY SETTINGS ---
 st.sidebar.header("⚙️ Game Settings")
 
 game_mode = st.sidebar.radio(
@@ -49,6 +49,16 @@ game_mode = st.sidebar.radio(
     ["Red Head", "Lucky Jack"],
     index=0,
     help="Select the game mode to change the winning condition."
+)
+
+st.sidebar.divider()
+st.sidebar.header("📊 Scoreboard Settings")
+
+# TOGGLE TO SHOW/HIDE PERCENTAGE
+show_win_rate = st.sidebar.toggle(
+    "Show Win Rate Percentage",
+    value=True,
+    help="Toggle off to hide the calculated win rate percentage metric."
 )
 
 st.title(f"🃏 {game_mode} Simulator")
@@ -121,15 +131,21 @@ with col3:
         st.rerun()
 
 # --- SCOREBOARD METRICS ---
-m1, m2, m3 = st.columns(3)
-m1.metric("Total Draws", st.session_state.total_draws)
-m2.metric(f"{game_mode} Wins 🏆", st.session_state.total_wins)
-
-if st.session_state.total_draws > 0:
-    win_rate = (st.session_state.total_wins / st.session_state.total_draws) * 100
-    m3.metric("Win Rate", f"{win_rate:.1f}%")
+# Dynamically adjust column layout based on toggle state
+if show_win_rate:
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Draws", st.session_state.total_draws)
+    m2.metric(f"{game_mode} Wins 🏆", st.session_state.total_wins)
+    
+    if st.session_state.total_draws > 0:
+        win_rate = (st.session_state.total_wins / st.session_state.total_draws) * 100
+        m3.metric("Win Rate", f"{win_rate:.1f}%")
+    else:
+        m3.metric("Win Rate", "0.0%")
 else:
-    m3.metric("Win Rate", "0.0%")
+    m1, m2 = st.columns(2)
+    m1.metric("Total Draws", st.session_state.total_draws)
+    m2.metric(f"{game_mode} Wins 🏆", st.session_state.total_wins)
 
 # Deck Status Caption
 if replace_immediately:
