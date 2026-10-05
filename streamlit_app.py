@@ -3,18 +3,12 @@ import random
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Red Head Card Game", page_icon="🂱", layout="centered")
-
-st.title("🂱 Red Head Card Game")
+st.set_page_config(page_title="Card Game Simulator", page_icon="🃏", layout="centered")
 
 # Mappings for ranks and suits
 SUITS = ["S", "H", "D", "C"]  # Spades, Hearts, Diamonds, Clubs
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 SUIT_NAMES = {"S": "Spades", "H": "Hearts", "D": "Diamonds", "C": "Clubs"}
-
-# Red Head winning criteria: Red suits (Hearts/Diamonds) + Picture heads (Jack, Queen, King)
-RED_HEAD_SUITS = ["H", "D"]
-HEAD_RANKS = ["J", "Q", "K"]
 
 
 def create_deck():
@@ -22,9 +16,15 @@ def create_deck():
     return [{"rank": r, "suit": s, "image": f"{r}{s}.png"} for s in SUITS for r in RANKS]
 
 
-def is_red_head(card):
-    """Checks if a card satisfies the Red Head win condition (Red Suit + J/Q/K)."""
-    return card["suit"] in RED_HEAD_SUITS and card["rank"] in HEAD_RANKS
+def check_win(card, game_mode):
+    """Evaluates win condition based on selected game mode."""
+    if game_mode == "Red Head":
+        # Red Head: Red Suit (Hearts/Diamonds) + Picture heads (J, Q, K)
+        return card["suit"] in ["H", "D"] and card["rank"] in ["J", "Q", "K"]
+    elif game_mode == "Lucky Jack":
+        # Lucky Jack: Black Suit (Spades/Clubs) + Jack (J)
+        return card["suit"] in ["S", "C"] and card["rank"] == "J"
+    return False
 
 
 # Initialize session state
@@ -41,10 +41,32 @@ if "total_wins" not in st.session_state:
 if "total_draws" not in st.session_state:
     st.session_state.total_draws = 0
 
-# --- GAME INFO BOX ---
-st.info(
-    "**Objective:** Draw a **Red Head** (Red Jack, Queen, or King of Hearts ♥ or Diamonds ♦) to win!"
+# --- SIDEBAR GAME MODE SELECTION ---
+st.sidebar.header("⚙️ Game Settings")
+
+game_mode = st.sidebar.radio(
+    "Choose Game Mode:",
+    ["Red Head", "Lucky Jack"],
+    index=0,
+    help="Select the game mode to change the winning condition."
 )
+
+st.title(f"🃏 {game_mode} Simulator")
+
+# Game Info Header
+if game_mode == "Red Head":
+    st.info("🎯 **Objective:** Draw a **Red Head** (Red Jack, Queen, or King of Hearts ♥ or Diamonds ♦) to win! *(6 winning cards in deck)*")
+elif game_mode == "Lucky Jack":
+    st.info("🎯 **Objective:** Draw a **Lucky Jack** (Black Jack of Spades ♠ or Clubs ♣) to win! *(2 winning cards in deck)*")
+
+# Reset score if game mode changes
+if "current_mode" not in st.session_state or st.session_state.current_mode != game_mode:
+    st.session_state.current_mode = game_mode
+    st.session_state.deck = create_deck()
+    random.shuffle(st.session_state.deck)
+    st.session_state.drawn_cards = []
+    st.session_state.total_wins = 0
+    st.session_state.total_draws = 0
 
 # --- CONTROLS SECTION ---
 st.subheader("Controls")
@@ -52,7 +74,7 @@ st.subheader("Controls")
 replace_immediately = st.toggle(
     "Replace card back into deck immediately",
     value=False,
-    help="When enabled, cards are placed back into the deck right after being drawn.",
+    help="When enabled, cards are placed back into the deck right after being drawn."
 )
 
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -75,7 +97,7 @@ def draw_cards(count=1):
 
     for card in cards:
         st.session_state.total_draws += 1
-        if is_red_head(card):
+        if check_win(card, game_mode):
             st.session_state.total_wins += 1
 
     st.session_state.drawn_cards.extend(cards)
@@ -101,7 +123,7 @@ with col3:
 # --- SCOREBOARD METRICS ---
 m1, m2, m3 = st.columns(3)
 m1.metric("Total Draws", st.session_state.total_draws)
-m2.metric("Red Head Wins 🏆", st.session_state.total_wins)
+m2.metric(f"{game_mode} Wins 🏆", st.session_state.total_wins)
 
 if st.session_state.total_draws > 0:
     win_rate = (st.session_state.total_wins / st.session_state.total_draws) * 100
@@ -113,47 +135,42 @@ else:
 if replace_immediately:
     st.caption("Mode: **With Replacement** | Remaining in deck: **52 (Infinite)**")
 else:
-    st.caption(
-        f"Mode: **Without Replacement** | Remaining in deck: **{len(st.session_state.deck)}**"
-    )
+    st.caption(f"Mode: **Without Replacement** | Remaining in deck: **{len(st.session_state.deck)}**")
 
 st.divider()
 
-# --- DISPLAY LAST DRAW & WIN ANNOUNCEMENT ---
+# --- CENTERED DISPLAY FOR LAST DRAW ---
 if st.session_state.drawn_cards:
     last_draw = st.session_state.drawn_cards[-1]
-    won = is_red_head(last_draw)
+    won = check_win(last_draw, game_mode)
 
     if won:
         st.balloons()
-        st.success(
-            f"🎉 **YOU WIN!** You drew the **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}**!"
-        )
+        st.success(f"🎉 **YOU WIN!** You drew the **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}**!")
     else:
-        st.write(
-            f"Drawn: **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}** (Not a Red Head)"
-        )
+        st.write(f"Drawn: **{last_draw['rank']} of {SUIT_NAMES[last_draw['suit']]}** (Not a win)")
 
-    # Card Image Rendering
+    # Centering the drawn card image using empty side columns
+    c_left, c_center, c_right = st.columns([1, 1, 1])
+
     image_path = os.path.join("assets", "cards", last_draw["image"])
     rank_c = "0" if last_draw["rank"] == "10" else last_draw["rank"]
     cdn_url = f"https://deckofcardsapi.com/static/img/{rank_c}{last_draw['suit']}.png"
 
-    if os.path.exists(image_path):
-        st.image(image_path, width=160)
-    else:
-        st.image(cdn_url, width=160)
+    with c_center:
+        if os.path.exists(image_path):
+            st.image(image_path, use_container_width=True)
+        else:
+            st.image(cdn_url, use_container_width=True)
 
-    # Display History Gallery
+    # --- DRAW HISTORY GALLERY ---
     if len(st.session_state.drawn_cards) > 1:
         st.subheader("Draw History")
         cols = st.columns(6)
         for i, card in enumerate(reversed(st.session_state.drawn_cards)):
             card_path = os.path.join("assets", "cards", card["image"])
             rank_code = "0" if card["rank"] == "10" else card["rank"]
-            card_cdn = (
-                f"https://deckofcardsapi.com/static/img/{rank_code}{card['suit']}.png"
-            )
+            card_cdn = f"https://deckofcardsapi.com/static/img/{rank_code}{card['suit']}.png"
 
             with cols[i % 6]:
                 if os.path.exists(card_path):
@@ -161,5 +178,5 @@ if st.session_state.drawn_cards:
                 else:
                     st.image(card_cdn, use_container_width=True)
 
-                if is_red_head(card):
+                if check_win(card, game_mode):
                     st.caption("🏆 WIN")
